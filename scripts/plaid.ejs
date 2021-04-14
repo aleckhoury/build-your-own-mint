@@ -29,6 +29,8 @@
           </p>
 
           <button id="link-btn" class="button button--is-primary">Connect with Plaid</button>
+
+          <button id="public-token-btn" class="button button--is-primary">Submit Public Token</button>
         </div>
 
         <div id="app" class="connected-view">
@@ -170,45 +172,107 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
-  (function($) {
+  (async function($) {
     var products = ['transactions']
 
-    var handler = Plaid.create({
-      apiVersion: 'v2',
-      clientName: 'Plaid Quickstart',
+    const fetchLinkToken = async () => {
+    const response = await fetch('/create_link_token', { method: 'POST' });
+    const responseJSON = await response.json();
+    return responseJSON.link_token;
+    };
+
+    const linkToken = await fetchLinkToken();
+
+    const linkConfigs = {
       env: 'development',
-      product: products,
-      key: '<%= PLAID_PUBLIC_KEY %>',
-      // webhook: 'https://your-domain.tld/plaid-webhook',
-      onSuccess: function(public_token) {
-        $.post('/get_access_token', {
-          public_token: public_token
-        }, function(data) {
-          $('#container').fadeOut('fast', function() {
-            $('#item_id').text(data.item_id);
-            $('#access_token').text(data.access_token);
-            $('#intro').hide();
-            $('#app, #steps').fadeIn('slow');
-          });
+      // 1. Pass a new link_token to Link.
+      token: linkToken,
+      onSuccess: async function(public_token, metadata) {
+        // 2a. Send the public_token to your app server.
+        // The onSuccess function is called when the user has successfully
+        // authenticated and selected an account to use.
+        console.log(public_token);
+        console.log(metadata);
+        await fetch('/get_access_token', {
+          headers: {'Content-Type': 'application/json'},
+          method: 'POST',
+          body: JSON.stringify({ public_token: 'public-development-915d6ca6-7c2d-4ad6-8adb-d4845ba5275d' }),
         });
       },
-    });
-    var accessToken = qs('access_token');
-    if (accessToken != null && accessToken != '') {
-      $.post('/set_access_token', {
-        access_token: accessToken
-      }, function(data) {
-        $('#container').fadeOut('fast', function() {
-          $('#item_id').text(data.item_id);
-          $('#access_token').text(accessToken);
-          $('#intro').hide();
-          $('#app, #steps').fadeIn('slow');
+      onExit: async function(err, metadata) {
+      // 2b. Gracefully handle the invalid link token error. A link token
+      // can become invalidated if it expires, has already been used
+      // for a link session, or is associated with too many invalid logins.
+      if (err != null && err.error_code === 'INVALID_LINK_TOKEN') {
+        linkHandler.destroy();
+        console.log(err);
+        // linkHandler = Plaid.create({
+        //   ...linkConfigs,
+        //   token: await fetchLinkToken(),
+        // });
+      }
+      if (err != null) {
+        // Handle any other types of errors.
+      }
+      // metadata contains information about the institution that the
+      // user selected and the most recent API request IDs.
+      // Storing this information can be helpful for support.
+      },
+    };
+
+    var linkHandler = Plaid.create(linkConfigs);
+
+    var publicTokenHandler = await fetch('/get_access_token', {
+          headers: {'Content-Type': 'application/json'},
+          method: 'POST',
+          body: JSON.stringify({ public_token: 'public-development-915d6ca6-7c2d-4ad6-8adb-d4845ba5275d' }),
         });
-      });
-    }
+
+    // const deleteItem = async () => {
+    //   const response = await fetch('/fetch_and_delete', { method: 'POST' });
+    //   const responseJSON = await response.json();
+    //   return responseJSON.link_token;
+    // };
+    // var handler = Plaid.create({
+    //   apiVersion: 'v2',
+    //   clientName: 'Plaid Quickstart',
+    //   env: 'development',
+    //   product: products,
+    //   key: '<%= PLAID_PUBLIC_KEY %>',
+    //   // webhook: 'https://your-domain.tld/plaid-webhook',
+    //   onSuccess: function(public_token) {
+    //     $.post('/get_access_token', {
+    //       public_token: public_token
+    //     }, function(data) {
+    //       $('#container').fadeOut('fast', function() {
+    //         $('#item_id').text(data.item_id);
+    //         $('#access_token').text(data.access_token);
+    //         $('#intro').hide();
+    //         $('#app, #steps').fadeIn('slow');
+    //       });
+    //     });
+    //   },
+    // });
+    // var accessToken = qs('access_token');
+    // if (accessToken != null && accessToken != '') {
+    //   $.post('/set_access_token', {
+    //     access_token: accessToken
+    //   }, function(data) {
+    //     $('#container').fadeOut('fast', function() {
+    //       $('#item_id').text(data.item_id);
+    //       $('#access_token').text(accessToken);
+    //       $('#intro').hide();
+    //       $('#app, #steps').fadeIn('slow');
+    //     });
+    //   });
+    // }
 
     $('#link-btn').on('click', function(e) {
-      handler.open();
+      linkHandler.open();
+    });
+
+    $('#public-token-btn').on('click', function(e) {
+      linkHandler.open();
     });
 
     $('#get-accounts-btn').on('click', function(e) {
