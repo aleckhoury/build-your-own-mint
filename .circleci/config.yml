@@ -30,7 +30,9 @@ workflows:
   test:
     jobs:
       - build
-
+  commit:
+    jobs:
+      - build
   nightly:
     triggers:
       - schedule:
